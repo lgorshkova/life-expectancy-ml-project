@@ -5,6 +5,9 @@ Coordinates fetching data from multiple sources (Eurostat and World Bank)
 with error handling and logging.
 """
 
+from pathlib import Path
+import pandas as pd
+
 import logging
 from typing import Callable, List
 
@@ -26,7 +29,7 @@ from src.world_bank_data_fetcher import (
 logger = logging.getLogger(__name__)
 
 
-def _setup_logging() -> None:
+def setup_logging() -> None:
     """Set up logging configuration for the data acquisition module."""
     if not logger.handlers:
         # Create console handler
@@ -46,21 +49,36 @@ def _setup_logging() -> None:
 
 
 # Define lists of fetcher functions by source
-EUROSTAT_FETCHERS: List[Callable[[], None]] = [
-    fetch_life_expectancy,
-    fetch_doctors_per_100k,
-    fetch_household_expenditure,
-    fetch_hospital_capacity,
-    fetch_gov_health_expenditure,
+# Map fetcher functions to their output filenames
+EUROSTAT_FETCHERS = [
+    (fetch_life_expectancy, "life_expectancy"),
+    (fetch_doctors_per_100k, "doctors_per_100k"),
+    (fetch_household_expenditure, "household_expenditure"),
+    (fetch_hospital_capacity, "hospital_capacity"),
+    (fetch_gov_health_expenditure, "government_health_expenditure"),
 ]
 
-WORLD_BANK_FETCHERS: List[Callable[[], None]] = [
-    fetch_gdp_per_capita,
-    fetch_urban_population_percentage,
-    fetch_fertility_rate,
-    fetch_population_density,
+WORLD_BANK_FETCHERS = [
+    (fetch_gdp_per_capita, "gdp_per_capita"),
+    (fetch_urban_population_percentage, "urban_population_pct"),
+    (fetch_fertility_rate, "fertility_rate"),
+    (fetch_population_density, "population_density"),
 ]
 
+def run_fetch_if_missing(fetcher: Callable[[], pd.DataFrame], filename: str) -> None:
+    """
+    Run fetcher function only if the corresponding CSV file
+    does not already exist in data/raw.
+    """
+
+    output_path = Path("data/raw") / f"{filename}.csv"
+
+    if output_path.exists():
+        logger.info(f"✓ {filename}.csv already exists. Skipping API call.")
+        return
+
+    logger.info(f"⬇ File not found. Fetching {filename} from API...")
+    fetcher()
 
 def run_data_acquisition() -> None:
     """
@@ -72,7 +90,7 @@ def run_data_acquisition() -> None:
 
     Logs progress and results for each dataset fetch and a summary at the end.
     """
-    _setup_logging()
+    setup_logging()
 
     logger.info("=" * 60)
     logger.info("Starting data acquisition from Eurostat")
@@ -84,12 +102,11 @@ def run_data_acquisition() -> None:
 
     # Fetch Eurostat data
 
-    for fetcher in EUROSTAT_FETCHERS:
+    for fetcher, filename in EUROSTAT_FETCHERS:
         dataset_name = fetcher.__name__
         try:
-            logger.info(f"Fetching {dataset_name}...")
-            fetcher()
-            logger.info(f"✓ {dataset_name} completed successfully")
+            logger.info(f"Processing {dataset_name}...")
+            run_fetch_if_missing(fetcher, filename)
             successful_fetches.append(dataset_name)
         except Exception as e:
             logger.error(
@@ -103,12 +120,11 @@ def run_data_acquisition() -> None:
 
     # Fetch World Bank data
 
-    for fetcher in WORLD_BANK_FETCHERS:
+    for fetcher, filename in WORLD_BANK_FETCHERS:
         dataset_name = fetcher.__name__
         try:
-            logger.info(f"Fetching {dataset_name}...")
-            fetcher()
-            logger.info(f"✓ {dataset_name} completed successfully")
+            logger.info(f"Processing {dataset_name}...")
+            run_fetch_if_missing(fetcher, filename)
             successful_fetches.append(dataset_name)
         except Exception as e:
             logger.error(

@@ -1,23 +1,41 @@
 """
-Main execution script for Life Expectancy ML Project.
+Main Execution Script
+---------------------
 
-Runs:
-1. Data acquisition (Eurostat + World Bank)
-2. Data processing & integration
+This script orchestrates the full Life Expectancy ML pipeline.
+
+Pipeline Steps:
+1. Data Acquisition (Eurostat + World Bank APIs)
+2. Data Processing & Integration
+3. Exploratory Data Summary
+4. Visualisation Generation
+
+This file should be executed from the project root directory.
 """
+
+# =============================
+# Import Pipeline Components
+# =============================
 
 from src.data_fetcher import run_data_acquisition
 from src.data_loader import integrate_datasets
+from src.exploratory_data_analysis import run_eda_summary
+from src.visualizations import run_visualisations
 
 
-def main():
+def main() -> None:
+    """
+    Execute the full end-to-end data pipeline.
+    """
 
+    # STEP 1: Data Acquisition
     print("=" * 100)
     print("STEP 1: Data Acquisition")
     print("=" * 100)
 
     run_data_acquisition()
 
+    # STEP 2: Data Integration
     print("\n" + "=" * 100)
     print("STEP 2: Data Processing & Integration")
     print("=" * 100)
@@ -29,9 +47,31 @@ def main():
         print(e)
         return
 
-    print("\nMaster dataset created successfully.")
+    print("\n✓ Master dataset created successfully.")
     print("Final dataset shape:", df_master.shape)
 
+    # STEP 3: Exploratory Data Summary
+    print("\n" + "=" * 100)
+    print("STEP 3: Exploratory Data Summary")
+    print("=" * 100)
 
+    run_eda_summary()
+
+    # STEP 4: Generating Visualisations
+    print("\n" + "=" * 100)
+    print("STEP 4: Generating Visualisations")
+    print("=" * 100)
+
+    try:
+        run_visualisations(df_master)
+    except Exception as e:
+        print("⚠ Error during visualisation execution.")
+        print(e)
+        return
+
+    print("\n✓ Full pipeline completed successfully!")
+
+
+# Entry point of the script
 if __name__ == "__main__":
     main()
