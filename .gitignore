@@ -1,5 +1,13 @@
+# Virtual environment
+venv/
+venv_clean/
+
+# Python cache
 __pycache__/
 *.pyc
-venv/
-.env
-data/raw/
+
+# Mac files
+.DS_Store
+
+# Jupyter
+.ipynb_checkpoints/
