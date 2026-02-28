@@ -1,93 +1,81 @@
+# src/ml/preprocessing.py
+
 from typing import Tuple
 import pandas as pd
 import numpy as np
-from sklearn.impute import KNNImputer
 from sklearn.model_selection import train_test_split
+from sklearn.impute import SimpleImputer
+from sklearn.preprocessing import StandardScaler
 
-def clean_data(df: pd.DataFrame) -> pd.DataFrame:
-    """
-    Removes non-numeric columns except for the target column 'life_expectancy'.
 
-    Returns cleaned dataframe with only numeric columns and 'life_expectancy'.
+def clean_data(df: pd.DataFrame, target: str) -> pd.DataFrame:
     """
-    if 'life_expectancy' not in df.columns:
-        raise ValueError("Target column 'life_expectancy' not found in dataframe.")
+    Keeps only numeric columns and target.
+    """
     numeric_cols = df.select_dtypes(include=[np.number]).columns.tolist()
-    if 'life_expectancy' not in numeric_cols:
-        numeric_cols.append('life_expectancy')
+    if target not in numeric_cols:
+        raise ValueError(f"Target column '{target}' must be numeric.")
     return df[numeric_cols].copy()
 
-def handle_missing_values(df: pd.DataFrame, method: str = "mean") -> pd.DataFrame:
+
+def split_data(
+    df: pd.DataFrame,
+    target: str,
+    test_size: float = 0.2
+) -> Tuple[pd.DataFrame, pd.DataFrame, pd.Series, pd.Series]:
     """
-    Handles missing values. Supports mean or KNN imputation.
-    Args:
-        df (pd.DataFrame): Input dataframe.
-        method (str): "mean" or "knn".
-    Returns Dataframe with imputed values.
+    Splits dataset BEFORE preprocessing to avoid leakage.
+    """
+    X = df.drop(columns=[target])
+    y = df[target]
+    return train_test_split(X, y, test_size=test_size, random_state=42)
+
+def remove_outliers_iqr(
+    X_train: pd.DataFrame,
+    y_train: pd.Series
+) -> Tuple[pd.DataFrame, pd.Series]:
+    """
+    Removes outliers based ONLY on the target variable.
     """
 
-    if df.empty:
-        raise ValueError("Input dataframe is empty.")
+    q1 = y_train.quantile(0.25)
+    q3 = y_train.quantile(0.75)
+    iqr = q3 - q1
 
-    # detect target if exists
-    target_col = "life_expectancy" if "life_expectancy" in df.columns else None
+    lower = q1 - 1.5 * iqr
+    upper = q3 + 1.5 * iqr
 
-    # split features + target
-    if target_col:
-        y = df[target_col]
-        X = df.drop(columns=[target_col])
-    else:
-        X = df.copy()
+    mask = y_train.between(lower, upper)
 
-    #  MEAN imputation 
-    if method == "mean":
-        X_imputed = X.fillna(X.mean())
+    print("Train size BEFORE outlier removal:", len(y_train))
+    print("Train size AFTER outlier removal:", mask.sum())
 
-    #  KNN imputation 
-    elif method == "knn":
-        imputer = KNNImputer(n_neighbors=5)
-        X_imputed = pd.DataFrame(
-            imputer.fit_transform(X),
-            columns=X.columns,
-            index=X.index
-        )
+    return X_train[mask], y_train[mask]
 
-    else:
-        raise ValueError("Imputation method must be 'mean' or 'knn'.")
 
-    # restore dataframe structure
-    if target_col:
-        return pd.concat([X_imputed, y], axis=1)
-    else:
-        return X_imputed
-
-def remove_outliers_iqr(df: pd.DataFrame, target: str) -> pd.DataFrame:
+def preprocess_training_data(
+    X_train: pd.DataFrame
+) -> Tuple[np.ndarray, SimpleImputer, StandardScaler]:
     """
-    Removes rows with outliers based on IQR for all numeric columns except target.
-    Returns Dataframe with outliers removed.
+    Fit imputer and scaler ONLY on training data.
     """
-    numeric_cols = [col for col in df.columns if col != target and pd.api.types.is_numeric_dtype(df[col])]
-    mask = pd.Series(True, index=df.index)
-    for col in numeric_cols:
-        q1 = df[col].quantile(0.25)
-        q3 = df[col].quantile(0.75)
-        iqr = q3 - q1
-        lower = q1 - 1.5 * iqr
-        upper = q3 + 1.5 * iqr
-        mask &= df[col].between(lower, upper)
-    return df[mask].copy()
+    imputer = SimpleImputer(strategy="mean")
+    scaler = StandardScaler()
 
-def split_data(df: pd.DataFrame, target: str) -> Tuple[np.ndarray, np.ndarray, np.ndarray, np.ndarray]:
+    X_imputed = imputer.fit_transform(X_train)
+    X_scaled = scaler.fit_transform(X_imputed)
+
+    return X_scaled, imputer, scaler
+
+
+def preprocess_test_data(
+    X_test: pd.DataFrame,
+    imputer: SimpleImputer,
+    scaler: StandardScaler
+) -> np.ndarray:
     """
-    Splits the dataframe into train and test sets.
-    Args:
-        df (pd.DataFrame): Input dataframe.
-        target (str): Target column name.
-    Returns:
-        Tuple[np.ndarray, np.ndarray, np.ndarray, np.ndarray]: X_train, X_test, y_train, y_test
+    Apply fitted preprocessing to test data.
     """
-    if target not in df.columns:
-        raise ValueError(f"Target column '{target}' not found in dataframe.")
-    X = df.drop(columns=[target]).values
-    y = df[target].values
-    return train_test_split(X, y, test_size=0.2, random_state=42)
+    X_imputed = imputer.transform(X_test)
+    X_scaled = scaler.transform(X_imputed)
+    return X_scaled
